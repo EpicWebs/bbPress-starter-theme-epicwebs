@@ -84,17 +84,20 @@ class BBP_Default extends BBP_Theme_Compat {
 
 		/** Scripts ***********************************************************/
 
-		add_action( 'bbp_enqueue_scripts',   array( $this, 'enqueue_styles'        ) ); // Enqueue theme CSS
-		add_action( 'bbp_enqueue_scripts',   array( $this, 'enqueue_scripts'       ) ); // Enqueue theme JS
-		add_filter( 'bbp_enqueue_scripts',   array( $this, 'localize_topic_script' ) ); // Enqueue theme script localization
-		add_action( 'bbp_head',              array( $this, 'head_scripts'          ) ); // Output some extra JS in the <head>
-		add_action( 'bbp_ajax_favorite',     array( $this, 'ajax_favorite'         ) ); // Handles the ajax favorite/unfavorite
-		add_action( 'bbp_ajax_subscription', array( $this, 'ajax_subscription'     ) ); // Handles the ajax subscribe/unsubscribe
+		add_action( 'bbp_enqueue_scripts',      array( $this, 'enqueue_styles'        		) ); // Enqueue theme CSS
+		add_action( 'bbp_enqueue_scripts',      array( $this, 'enqueue_scripts'       		) ); // Enqueue theme JS
+		add_filter( 'bbp_enqueue_scripts',      array( $this, 'localize_topic_script' 		) ); // Enqueue theme script localization
+		add_action( 'bbp_head',                 array( $this, 'head_scripts'          		) ); // Output some extra JS in the <head>
+		add_action( 'wp_ajax_dim-favorite',     array( $this, 'ajax_favorite'         		) ); // Handles the ajax favorite/unfavorite
+		add_action( 'wp_ajax_dim-subscription', array( $this, 'ajax_subscription'     		) ); // Handles the ajax subscribe/unsubscribe
 
 		/** Template Wrappers *************************************************/
 
-		add_action( 'bbp_before_main_content',  array( $this, 'before_main_content'   ) ); // Top wrapper HTML
-		add_action( 'bbp_after_main_content',   array( $this, 'after_main_content'    ) ); // Bottom wrapper HTML
+		add_action( 'bbp_before_main_content',  array( $this, 'before_main_content'   		) ); // Top wrapper HTML
+		add_action( 'bbp_after_main_content',   array( $this, 'after_main_content'    		) ); // Bottom wrapper HTML
+		add_action( 'admin_menu', 				array( $this, 'epicwebs_theme_menu'	  		) );
+		add_action( 'wp_head', 					array( $this, 'epicweb_hide_sidebar_css'	) );
+		add_filter( 'wp_footer', 				array( $this, 'epicweb_add_forum_link'	) , 1000 );
 
 		/** Override **********************************************************/
 
@@ -174,20 +177,11 @@ class BBP_Default extends BBP_Theme_Compat {
 	 */
 	public function enqueue_scripts() {
 
-		// Always pull in jQuery for TinyMCE shortcode usage
-		if ( bbp_use_wp_editor() ) {
-			wp_enqueue_script( 'jquery' );
-		}
+		if ( bbp_is_single_topic() )
+			wp_enqueue_script( 'bbpress-topic', $this->url . 'js/topic.js', array( 'wp-lists' ), $this->version, true );
 
-		// Topic favorite/subscribe
-		if ( bbp_is_single_topic() ) {
-			wp_enqueue_script( 'bbpress-topic', $this->url . 'js/topic.js', array( 'jquery' ), $this->version );
-		}
-
-		// User Profile edit
-		if ( bbp_is_single_user_edit() ) {
+		elseif ( bbp_is_single_user_edit() )
 			wp_enqueue_script( 'user-profile' );
-		}
 	}
 
 	/**
@@ -200,64 +194,16 @@ class BBP_Default extends BBP_Theme_Compat {
 	 * @uses bbp_is_single_user_edit() To check if it's the profile edit page
 	 */
 	public function head_scripts() {
-
-		// Bail if no extra JS is needed
-		if ( ! bbp_is_single_user_edit() && ! bbp_use_wp_editor() )
-			return; ?>
+	?>
 
 		<script type="text/javascript">
 			/* <![CDATA[ */
+			var ajaxurl = '<?php echo admin_url( 'admin-ajax.php' ); ?>';
+
 			<?php if ( bbp_is_single_user_edit() ) : ?>
 			if ( window.location.hash == '#password' ) {
 				document.getElementById('pass1').focus();
 			}
-			<?php endif; ?>
-
-			<?php if ( bbp_use_wp_editor() ) : ?>
-			jQuery(document).ready( function() {
-
-				/* Tab from topic title */
-				jQuery( '#bbp_topic_title' ).bind( 'keydown.editor-focus', function(e) {
-					if ( e.which != 9 )
-						return;
-
-					if ( !e.ctrlKey && !e.altKey && !e.shiftKey ) {
-						if ( typeof( tinymce ) != 'undefined' ) {
-							if ( ! tinymce.activeEditor.isHidden() ) {
-								var editor = tinymce.activeEditor.editorContainer;
-								jQuery( '#' + editor + ' td.mceToolbar > a' ).focus();
-							} else {
-								jQuery( 'textarea.bbp-the-content' ).focus();
-							}
-						} else {
-							jQuery( 'textarea.bbp-the-content' ).focus();
-						}
-
-						e.preventDefault();
-					}
-				});
-
-				/* Shift + tab from topic tags */
-				jQuery( '#bbp_topic_tags' ).bind( 'keydown.editor-focus', function(e) {
-					if ( e.which != 9 )
-						return;
-
-					if ( e.shiftKey && !e.ctrlKey && !e.altKey ) {
-						if ( typeof( tinymce ) != 'undefined' ) {
-							if ( ! tinymce.activeEditor.isHidden() ) {
-								var editor = tinymce.activeEditor.editorContainer;
-								jQuery( '#' + editor + ' td.mceToolbar > a' ).focus();
-							} else {
-								jQuery( 'textarea.bbp-the-content' ).focus();
-							}
-						} else {
-							jQuery( 'textarea.bbp-the-content' ).focus();
-						}
-
-						e.preventDefault();
-					}
-				});
-			});
 			<?php endif; ?>
 			/* ]]> */
 		</script>
@@ -289,83 +235,88 @@ class BBP_Default extends BBP_Theme_Compat {
 		if ( !bbp_is_single_topic() )
 			return;
 
-		wp_localize_script( 'bbpress-topic', 'bbpTopicJS', array(
-			'bbp_ajaxurl'        => bbp_get_ajax_url(),
-			'generic_ajax_error' => __( 'Something went wrong. Refresh your browser and try again.', 'bbpress' ),
-			'is_user_logged_in'  => is_user_logged_in(),
-			'fav_nonce'          => wp_create_nonce( 'toggle-favorite_' .     get_the_ID() ),
-			'subs_nonce'         => wp_create_nonce( 'toggle-subscription_' . get_the_ID() )
-		) );
+		// Bail if user is not logged in
+		if ( !is_user_logged_in() )
+			return;
+
+		$user_id = bbp_get_current_user_id();
+
+		$localizations = array(
+			'currentUserId' => $user_id,
+			'topicId'       => bbp_get_topic_id(),
+		);
+
+		// Favorites
+		if ( bbp_is_favorites_active() ) {
+			$localizations['favoritesActive'] = 1;
+			$localizations['favoritesLink']   = bbp_get_favorites_permalink( $user_id );
+			$localizations['isFav']           = (int) bbp_is_user_favorite( $user_id );
+			$localizations['favLinkYes']      = __( 'favorites',                                         'bbpress' );
+			$localizations['favLinkNo']       = __( '?',                                                 'bbpress' );
+			$localizations['favYes']          = __( 'This topic is one of your %favLinkYes% [%favDel%]', 'bbpress' );
+			$localizations['favNo']           = __( '%favAdd% (%favLinkNo%)',                            'bbpress' );
+			$localizations['favDel']          = __( '&times;',                                           'bbpress' );
+			$localizations['favAdd']          = __( 'Add this topic to your favorites',                  'bbpress' );
+		} else {
+			$localizations['favoritesActive'] = 0;
+		}
+
+		// Subscriptions
+		if ( bbp_is_subscriptions_active() ) {
+			$localizations['subsActive']   = 1;
+			$localizations['isSubscribed'] = (int) bbp_is_user_subscribed( $user_id );
+			$localizations['subsSub']      = __( 'Subscribe',   'bbpress' );
+			$localizations['subsUns']      = __( 'Unsubscribe', 'bbpress' );
+			$localizations['subsLink']     = bbp_get_topic_permalink();
+		} else {
+			$localizations['subsActive'] = 0;
+		}
+
+		wp_localize_script( 'bbpress-topic', 'bbpTopicJS', $localizations );
 	}
 
 	/**
-	 * AJAX handler to add or remove a topic from a user's favorites
+	 * Add or remove a topic from a user's favorites
 	 *
 	 * @since bbPress (r3732)
 	 *
 	 * @uses bbp_get_current_user_id() To get the current user id
 	 * @uses current_user_can() To check if the current user can edit the user
 	 * @uses bbp_get_topic() To get the topic
-	 * @uses wp_verify_nonce() To verify the nonce & check the referer
+	 * @uses check_ajax_referer() To verify the nonce & check the referer
 	 * @uses bbp_is_user_favorite() To check if the topic is user's favorite
 	 * @uses bbp_remove_user_favorite() To remove the topic from user's favorites
 	 * @uses bbp_add_user_favorite() To add the topic from user's favorites
-	 * @uses bbp_ajax_response() To return JSON
 	 */
 	public function ajax_favorite() {
-
-		// Bail if favorites are not active
-		if ( ! bbp_is_favorites_active() ) {
-			bbp_ajax_response( false, __( 'Favorites are no longer active.', 'bbpress' ), 300 );
-		}
-
-		// Bail if user is not logged in
-		if ( !is_user_logged_in() ) {
-			bbp_ajax_response( false, __( 'Please login to make this topic a favorite.', 'bbpress' ), 301 );
-		}
-
-		// Get user and topic data
 		$user_id = bbp_get_current_user_id();
-		$id      = !empty( $_POST['id'] ) ? intval( $_POST['id'] ) : 0;
+		$id      = intval( $_POST['id'] );
 
-		// Bail if user cannot add favorites for this user
-		if ( !current_user_can( 'edit_user', $user_id ) ) {
-			bbp_ajax_response( false, __( 'You do not have permission to do this.', 'bbpress' ), 302 );
-		}
+		if ( !current_user_can( 'edit_user', $user_id ) )
+			die( '-1' );
 
-		// Get the topic
 		$topic = bbp_get_topic( $id );
 
-		// Bail if topic cannot be found
-		if ( empty( $topic ) ) {
-			bbp_ajax_response( false, __( 'The topic could not be found.', 'bbpress' ), 303 );
+		if ( empty( $topic ) )
+			die( '0' );
+
+		check_ajax_referer( 'toggle-favorite_' . $topic->ID );
+
+		if ( bbp_is_user_favorite( $user_id, $topic->ID ) ) {
+			if ( bbp_remove_user_favorite( $user_id, $topic->ID ) ) {
+				die( '1' );
+			}
+		} else {
+			if ( bbp_add_user_favorite( $user_id, $topic->ID ) ) {
+				die( '1' );
+			}
 		}
 
-		// Bail if user did not take this action
-		if ( !isset( $_POST['nonce'] ) || !wp_verify_nonce( $_POST['nonce'], 'toggle-favorite_' . $topic->ID ) ) {
-			bbp_ajax_response( false, __( 'Are you sure you meant to do that?', 'bbpress' ), 304 );
-		}
-
-		// Take action
-		$status = bbp_is_user_favorite( $user_id, $topic->ID ) ? bbp_remove_user_favorite( $user_id, $topic->ID ) : bbp_add_user_favorite( $user_id, $topic->ID );
-
-		// Bail if action failed
-		if ( empty( $status ) ) {
-			bbp_ajax_response( false, __( 'The request was unsuccessful. Please try again.', 'bbpress' ), 305 );
-		}
-
-		// Put subscription attributes in convenient array
-		$attrs = array(
-			'topic_id' => $topic->ID,
-			'user_id'  => $user_id
-		);
-
-		// Action succeeded
-		bbp_ajax_response( true, bbp_get_user_favorites_link( $attrs, $user_id, false ), 200 );
+		die( '0' );
 	}
 
 	/**
-	 * AJAX handler to Subscribe/Unsubscribe a user from a topic
+	 * Subscribe/Unsubscribe a user from a topic
 	 *
 	 * @since bbPress (r3732)
 	 *
@@ -373,65 +324,44 @@ class BBP_Default extends BBP_Theme_Compat {
 	 * @uses bbp_get_current_user_id() To get the current user id
 	 * @uses current_user_can() To check if the current user can edit the user
 	 * @uses bbp_get_topic() To get the topic
-	 * @uses wp_verify_nonce() To verify the nonce
-	 * @uses bbp_is_user_subscribed() To check if the topic is in user's subscriptions
-	 * @uses bbp_remove_user_subscriptions() To remove the topic from user's subscriptions
+	 * @uses check_ajax_referer() To verify the nonce & check the referer
+	 * @uses bbp_is_user_subscribed() To check if the topic is in user's
+	 *                                 subscriptions
+	 * @uses bbp_remove_user_subscriptions() To remove the topic from user's
+	 *                                        subscriptions
 	 * @uses bbp_add_user_subscriptions() To add the topic from user's subscriptions
-	 * @uses bbp_ajax_response() To return JSON
 	 */
 	public function ajax_subscription() {
+		if ( !bbp_is_subscriptions_active() )
+			return;
 
-		// Bail if subscriptions are not active
-		if ( !bbp_is_subscriptions_active() ) {
-			bbp_ajax_response( false, __( 'Subscriptions are no longer active.', 'bbpress' ), 300 );
-		}
-
-		// Bail if user is not logged in
-		if ( !is_user_logged_in() ) {
-			bbp_ajax_response( false, __( 'Please login to subscribe to this topic.', 'bbpress' ), 301 );
-		}
-
-		// Get user and topic data
 		$user_id = bbp_get_current_user_id();
 		$id      = intval( $_POST['id'] );
 
-		// Bail if user cannot add favorites for this user
-		if ( !current_user_can( 'edit_user', $user_id ) ) {
-			bbp_ajax_response( false, __( 'You do not have permission to do this.', 'bbpress' ), 302 );
-		}
+		if ( !current_user_can( 'edit_user', $user_id ) )
+			die( '-1' );
 
-		// Get the topic
 		$topic = bbp_get_topic( $id );
 
-		// Bail if topic cannot be found
-		if ( empty( $topic ) ) {
-			bbp_ajax_response( false, __( 'The topic could not be found.', 'bbpress' ), 303 );
+		if ( empty( $topic ) )
+			die( '0' );
+
+		check_ajax_referer( 'toggle-subscription_' . $topic->ID );
+
+		if ( bbp_is_user_subscribed( $user_id, $topic->ID ) ) {
+			if ( bbp_remove_user_subscription( $user_id, $topic->ID ) ) {
+				die( '1' );
+			}
+		} else {
+			if ( bbp_add_user_subscription( $user_id, $topic->ID ) ) {
+				die( '1' );
+			}
 		}
 
-		// Bail if user did not take this action
-		if ( !isset( $_POST['nonce'] ) || !wp_verify_nonce( $_POST['nonce'], 'toggle-subscription_' . $topic->ID ) ) {
-			bbp_ajax_response( false, __( 'Are you sure you meant to do that?', 'bbpress' ), 304 );
-		}
-
-		// Take action
-		$status = bbp_is_user_subscribed( $user_id, $topic->ID ) ? bbp_remove_user_subscription( $user_id, $topic->ID ) : bbp_add_user_subscription( $user_id, $topic->ID );
-
-		// Bail if action failed
-		if ( empty( $status ) ) {
-			bbp_ajax_response( false, __( 'The request was unsuccessful. Please try again.', 'bbpress' ), 305 );
-		}
-
-		// Put subscription attributes in convenient array
-		$attrs = array(
-			'topic_id' => $topic->ID,
-			'user_id'  => $user_id
-		);
-
-		// Action succeeded
-		bbp_ajax_response( true, bbp_get_user_subscribe_link( $attrs, $user_id, false ), 200 );
+		die( '0' );
 	}
-
-		public function epicwebs_bbp_list_forums( $args = '' ) {
+	
+	public function epicwebs_bbp_list_forums( $args = '' ) {
 
 		// Define used variables
 		$output = $sub_forums = $topic_count = $reply_count = $counts = '';
@@ -470,10 +400,11 @@ class BBP_Default extends BBP_Theme_Compat {
 				$i++; // Separator count
 
 				// Get forum details
-				$count     = array();
-				$show_sep  = $total_subs > $i ? $separator : '';
-				$permalink = bbp_get_forum_permalink( $sub_forum->ID );
-				$title     = bbp_get_forum_title( $sub_forum->ID );
+				$count       = array();
+				$show_sep    = $total_subs > $i ? $separator : '';
+				$permalink   = bbp_get_forum_permalink( $sub_forum->ID );
+				$title       = bbp_get_forum_title( $sub_forum->ID );
+				$description = bbp_get_forum_content( $sub_forum->ID );
 
 				// Show topic count
 				if ( !empty( $show_topic_count ) && !bbp_is_forum_category( $sub_forum->ID ) ) {
@@ -496,7 +427,7 @@ class BBP_Default extends BBP_Theme_Compat {
 
 				// Build this sub forums link
 				if ($i % 2) { $class = "odd-forum-row"; } else { $class = "even-forum-row"; }
-				$output .= "<li class='{$class}'><ul>" . $link_before . '<a href="' . $permalink . '" class="bbp-forum-link">' . $title . '</a>' . $counts . $freshness_link . $link_after . "</ul></li>";
+				$output .= "<li class='{$class}'><ul>" . $link_before . '<div class="bbp-forum-title-container"><a href="' . $permalink . '" class="bbp-forum-link">' . $title . '</a>' . $description . '</div>' . $counts . $freshness_link . $link_after . "</ul></li>";
 			}
 
 			// Output the list
@@ -569,10 +500,10 @@ class BBP_Default extends BBP_Theme_Compat {
 	
 	/* Last poster / freshness block for topics */
 	public function epicwebs_last_poster_block_topics() {
-		echo BBP_Default::epicwebs_get_last_poster_block_topics();
+		echo BBP_Default::teamop_get_last_poster_block_topics();
 	}
 	
-		public function epicwebs_get_last_poster_block_topics() {
+		public function teamop_get_last_poster_block_topics() {
 
 				$output .= "<div class='last-posted-topic-user'>";
 				$output .= bbp_get_reply_author_link( array( 'post_id' => bbp_get_topic_last_active_id(), 'size' => '14' ) );
@@ -584,6 +515,101 @@ class BBP_Default extends BBP_Theme_Compat {
 			return $output;
 		
 		}
+
+	// Setup the options menu for the epicwebs bbPress theme
+	public function epicwebs_theme_menu() {
+		add_theme_page('EpicWebs bbPress', 'bbPress Theme', 'read', 'epicwebs-theme-options-page', array( $this, 'epicwebs_theme_options_page' ) );
+	}	
+	
+	public function epicwebs_theme_options_page() {
+
+		//must check that the user has the required capability 
+		if (!current_user_can('manage_options'))
+		{
+		  wp_die( __('You do not have sufficient permissions to access this page.') );
+		}
+
+		// Read in existing option value from database
+		$epicweb_sidebar_element = get_option( 'epicweb_sidebar_element' );
+		$epicweb_content_element = get_option( 'epicweb_content_element' );
+		$epicweb_menu_element = get_option( 'epicweb_menu_element' );
+
+		// See if the user has posted us some information
+		// If they did, this hidden field will be set to 'Y'
+		if( isset($_POST[ 'epicweb_submit_hidden' ]) && $_POST[ 'epicweb_submit_hidden' ] == 'Y' ) {
+			// Read their posted value
+			$epicweb_sidebar_element = $_POST[ 'epicweb_sidebar_element' ];
+			$epicweb_content_element = $_POST[ 'epicweb_content_element' ];
+			$epicweb_menu_element = $_POST[ 'epicweb_menu_element' ];
+
+			// Save the posted value in the database
+			update_option( 'epicweb_sidebar_element', $epicweb_sidebar_element );
+			update_option( 'epicweb_content_element', $epicweb_content_element );
+			update_option( 'epicweb_menu_element', $epicweb_menu_element );
+
+			// Put an settings updated message on the screen
+
+		?>
+			<div class="updated"><p><strong><?php _e('Settings saved.', 'epicwebs-theme-options-page' ); ?></strong></p></div>
+		<?php
+
+			}
+			echo '<div class="wrap">';
+			echo "<h2>" . __( 'bbPress Theme Options', 'epicwebs-theme-options-page' ) . "</h2>";
+		?>
+
+			<form name="form1" method="post" action="">
+			<input type="hidden" name="epicweb_submit_hidden" value="Y">
+
+			<h3>Hide Sidebar Options</h3>
+			<p>To hide your sidebar and make the forum full width, please enter your sidebar ID (for example: #secondary) and your primary content ID (for example: #primary).<br />This is experimental, use with caution.</p>
+			<p>
+				<?php _e("Sidebar ID or Class:", 'epicwebs-theme-options-page' ); ?> 
+				<input type="text" name="epicweb_sidebar_element" value="<?php echo $epicweb_sidebar_element; ?>"><br />
+				<?php _e("Content ID or Class:", 'epicwebs-theme-options-page' ); ?> 
+				<input type="text" name="epicweb_content_element" value="<?php echo $epicweb_content_element; ?>">
+			</p>
+			
+			<h3>Insert Forum Link</h3>
+			<p>Tick this box to attempt to inject a forum link at the end of your menu, it will attach itself to your Primary menu.<br />This is experimental, use with caution.</p>
+			<p>
+				<?php _e("Menu container:", 'epicwebs-theme-options-page' ); ?> 
+				<input type="text" name="epicweb_menu_element" value="<?php echo $epicweb_menu_element; ?>">
+			</p>
+			
+			<p class="submit">
+				<input type="submit" name="Submit" class="button-primary" value="<?php esc_attr_e('Save Changes') ?>" />
+			</p>
+
+			</form>
+			</div>
+
+		<?php
+	}
+	
+	public function epicweb_hide_sidebar_css() {
+		$epicweb_sidebar_element = get_option( 'epicweb_sidebar_element' );
+		$epicweb_content_element = get_option( 'epicweb_content_element' );
+		
+		if((isset($epicweb_sidebar_element)) && (isset($epicweb_content_element))) {
+			echo "	<style type='text/css'>
+						{$epicweb_sidebar_element} { display: none !important; }
+						{$epicweb_content_element} { width: 100%; }
+					</style>";
+		}
+	}
+	
+	public function epicweb_add_forum_link() {
+		$epicweb_menu_element = get_option( 'epicweb_menu_element' );
+		
+		if(isset($epicweb_menu_element)) {
+			echo "<script type='text/javascript'> if(typeof jQuery == 'undefined'){ document.write('<script type=\"text/javascript\" src=\"http://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.7.1.min.js\"></'+'script>'); } </script>";
+			echo "<script type='text/javascript'>
+				$('{$epicweb_menu_element}').children('ul').append('<li><a href=\"/forums/\">Forums</a></li>');
+			</script>";
+		}
+	}
+	
 }
 new BBP_Default();
 endif;
