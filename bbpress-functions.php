@@ -708,7 +708,7 @@ class BBP_Default extends BBP_Theme_Compat {
 		if(isset($epicweb_menu_element)) {
 			echo "<script type='text/javascript'> if(typeof jQuery == 'undefined'){ document.write('<script type=\"text/javascript\" src=\"http://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.7.1.min.js\"></'+'script>'); } </script>";
 			echo "<script type='text/javascript'>
-				$('{$epicweb_menu_element}').children('ul').append('<li><a href=\"/forums/\">Forums</a></li>');
+				jQuery('{$epicweb_menu_element}').children('ul').append('<li><a href=\"/forums/\">Forums</a></li>');
 			</script>";
 		}
 	}
